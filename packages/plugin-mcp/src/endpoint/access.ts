@@ -1,0 +1,153 @@
+import type { PayloadRequest, SanitizedPermissions } from 'payload'
+
+import { executeAuthStrategies, getAccessResults, UnauthorizedError } from 'payload'
+import { extractBearerToken } from 'payload/shared'
+
+import type { AuthorizedMCP, MCPItem } from '../types.js'
+
+import { getPluginConfig } from '../utils/getPluginConfig.js'
+import { authenticateLoginToken } from './oauthLoginToken.js'
+
+export type GetAuthorizedMCPArgs = {
+  /**
+   * Whether the request came through the HTTP endpoint, whose response can carry the OAuth
+   * challenge and headers from auth strategies. stdio has no response to carry them.
+   */
+  isHTTP?: boolean
+  overrideAccess: boolean
+  req: PayloadRequest
+}
+
+/**
+ * Authenticates an MCP request and removes items the user cannot access.
+ * `overrideAccess` skips Payload and MCP item access checks.
+ */
+export const getAuthorizedMCP: (args: GetAuthorizedMCPArgs) => Promise<AuthorizedMCP> = async ({
+  isHTTP = false,
+  overrideAccess,
+  req,
+}) => {
+  const pluginConfig = getPluginConfig({ config: req.payload.config })
+  const isChallengedWhenSignedOut = isHTTP && Boolean(pluginConfig.oauth)
+
+  if (pluginConfig.overrideGetAuthorizedMCP) {
+    return await pluginConfig.overrideGetAuthorizedMCP({
+      overrideAccess,
+      pluginConfig,
+      req,
+    })
+  }
+
+  if (req.headers) {
+    const headers = new Headers(req.headers)
+    const hasAuthorization = headers.has('Authorization')
+
+    headers.set('DisableAutologin', 'true')
+    // Not `payload.auth()`, which also computes permissions that filterMCPItems computes anyway
+    const { responseHeaders, user } = await executeAuthStrategies({
+      canSetHeaders: isHTTP,
+      headers,
+      payload: req.payload,
+      req,
+    })
+    req.user = user
+    if (responseHeaders) {
+      req.responseHeaders = responseHeaders
+    }
+
+    // Only bearer tokens that no auth strategy accepted get here, e.g. an OAuth access token.
+    // API keys use the `<collection> API-Key <key>` scheme instead of `Bearer`, so they never do.
+    const bearerToken = extractBearerToken({ headers })
+    // Sealed Payload login tokens from the built-in OAuth server
+    if (
+      !req.user &&
+      bearerToken &&
+      pluginConfig.oauth?.type === 'builtin' &&
+      !pluginConfig.oauth.issueToken
+    ) {
+      req.user = await authenticateLoginToken({ req, token: bearerToken })
+    }
+    if (!req.user && bearerToken && pluginConfig.oauth?.authenticate) {
+      req.user = await pluginConfig.oauth.authenticate({ req, token: bearerToken })
+    }
+
+    // With OAuth, the endpoint answers with a challenge that starts the client's sign-in
+    if (hasAuthorization && !req.user && !isChallengedWhenSignedOut) {
+      throw new UnauthorizedError(req.t)
+    }
+  }
+
+  // Signed-out users only get the challenge, so they can't use any MCP items. Skipping the access
+  // checks saves work, and access callbacks only see signed-in users.
+  if (isChallengedWhenSignedOut && !req.user) {
+    return { items: [], overrideAccess }
+  }
+
+  return {
+    items: await filterMCPItems({
+      items: pluginConfig.items,
+      overrideAccess,
+      req,
+    }),
+    overrideAccess,
+  }
+}
+
+export const filterMCPItems = async ({
+  items,
+  overrideAccess,
+  req,
+}: {
+  items: MCPItem[]
+  overrideAccess: boolean
+  req: PayloadRequest
+}): Promise<MCPItem[]> => {
+  // Match Payload core: overrideAccess bypasses access evaluation
+  if (overrideAccess) {
+    return items
+  }
+
+  const authorizedItems: MCPItem[] = []
+
+  const permissions = await getAccessResults({ req })
+
+  for (const item of items) {
+    if (!(await checkItemAccess({ item, permissions, req }))) {
+      continue
+    }
+    authorizedItems.push(item)
+  }
+
+  return authorizedItems
+}
+
+/**
+ * Runs MCP item access callbacks
+ */
+const checkItemAccess = async ({
+  item,
+  permissions,
+  req,
+}: {
+  item: MCPItem
+  permissions?: SanitizedPermissions
+  req: PayloadRequest
+}): Promise<boolean> => {
+  switch (item.type) {
+    case 'collectionTool':
+      return (
+        !item.tool.access ||
+        (await item.tool.access({ slug: item.collectionSlug, permissions, req }))
+      )
+    case 'globalTool':
+      return (
+        !item.tool.access || (await item.tool.access({ slug: item.globalSlug, permissions, req }))
+      )
+    case 'prompt':
+      return !item.prompt.access || (await item.prompt.access({ permissions, req }))
+    case 'resource':
+      return !item.resource.access || (await item.resource.access({ permissions, req }))
+    case 'tool':
+      return !item.tool.access || (await item.tool.access({ permissions, req }))
+  }
+}

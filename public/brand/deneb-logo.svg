@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 220" width="100%" height="100%">
+  <defs>
+    <linearGradient id="denebCore" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F2FE" />
+      <stop offset="50%" stop-color="#4FACFE" />
+      <stop offset="100%" stop-color="#000" />
+    </linearGradient>
+    <linearGradient id="swanGlow" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38EF7D" />
+      <stop offset="100%" stop-color="#11998E" />
+    </linearGradient>
+    <linearGradient id="whiteGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#E2E8F0" />
+    </linearGradient>
+    <filter id="denebAura" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <rect width="100%" height="100%" fill="#0A0E1A" rx="16" />
+
+  <!-- Constellation Cygnus Matrix -->
+  <g opacity="0.15" stroke="#00F2FE" stroke-width="1.2">
+    <line x1="40" y1="20" x2="760" y2="20" />
+    <line x1="40" y1="110" x2="760" y2="110" />
+    <line x1="40" y1="200" x2="760" y2="200" />
+    <circle cx="110" cy="110" r="85" stroke-dasharray="3 5" fill="none" />
+  </g>
+
+  <!-- Deneb Star Icon (Summer Triangle Vertex) -->
+  <g transform="translate(110, 110)">
+    <circle cx="0" cy="0" r="54" fill="url(#denebCore)" opacity="0.3" filter="url(#denebAura)" />
+    
+    <!-- Geometric 4-point Cygnus diamond -->
+    <polygon points="0,-68 18,-18 68,0 18,18 0,68 -18,18 -68,0 -18,-18" fill="url(#denebCore)" />
+    <!-- Secondary Cross -->
+    <polygon points="0,-44 10,-10 44,0 10,10 0,44 -10,10 -44,0 -10,-10" fill="url(#swanGlow)" opacity="0.95" />
+    
+    <!-- White Supergiant Core -->
+    <circle cx="0" cy="0" r="14" fill="#FFFFFF" />
+    <circle cx="0" cy="0" r="7" fill="#00F2FE" />
+  </g>
+
+  <!-- Typography -->
+  <text x="220" y="98" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="52" font-weight="900" letter-spacing="2" fill="url(#whiteGrad)">
+    DENEB<tspan fill="#00F2FE">CMS</tspan>
+  </text>
+  
+  <text x="222" y="138" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="600" letter-spacing="4" fill="#38EF7D">
+    ENTERPRISE HEADLESS CMS &amp; NEXT.JS APP ENGINE
+  </text>
+
+  <text x="222" y="168" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" letter-spacing="1.5" fill="#94A3B8">
+    NATIVE NEXT.JS 15 • CODE-FIRST SCHEMAS • GRAPHQL &amp; REST • POSTGRESQL
+  </text>
+
+  <!-- MIT Badge -->
+  <g transform="translate(680, 42)">
+    <rect x="-40" y="-14" width="80" height="26" rx="13" fill="#1E293B" stroke="#00F2FE" stroke-width="1.5" />
+    <circle cx="-24" cy="-1" r="4" fill="#10B981" />
+    <text x="-12" y="3" font-family="sans-serif" font-size="10" font-weight="700" fill="#E2E8F0" letter-spacing="1">MIT</text>
+  </g>
+</svg>

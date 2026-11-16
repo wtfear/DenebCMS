@@ -1,0 +1,9 @@
+# Order matters. The last matching pattern takes precedence
+
+## Release
+
+/tools/releaser/src/ @denolfe @DanRibbens
+/.github/workflows/release-bump.yml @denolfe @DanRibbens
+/.github/workflows/publish-release.yml @denolfe @DanRibbens
+/.github/actions/setup/ @denolfe @DanRibbens
+/.github/CODEOWNERS @denolfe @DanRibbens

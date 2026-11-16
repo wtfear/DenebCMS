@@ -1,0 +1,292 @@
+'use client'
+import { dequal } from 'dequal/lite' // lite: no need for Map and Set support
+import { formatAdminURL } from 'payload/shared'
+import React, { createContext, use, useCallback, useEffect, useRef } from 'react'
+
+import type { Preferences } from '../../forms/Form/types.js'
+
+import { useTranslation } from '../../providers/Translation/index.js'
+import { requests } from '../../utilities/api.js'
+import { deepMergeSimple } from '../../utilities/deepMerge.js'
+import { useAuth } from '../Auth/index.js'
+import { useConfig } from '../Config/index.js'
+
+type PreferenceUpdater<T> = (current: null | T) => T
+
+type SetPreference = {
+  <T = Preferences>(key: string, updater: PreferenceUpdater<T>): Promise<void>
+  <T = Preferences>(key: string, value: T, merge?: boolean): Promise<void>
+}
+
+type PreferencesContext = {
+  getPreference: <T = Preferences>(key: string) => Promise<T>
+  /**
+   * @param key - a string identifier for the property being set
+   * @param value - preference data to store
+   * @param merge - when true, combines the value with the existing preference stored under the key
+   * and batches concurrent changes to that key into one request, default = false. Awaiting the
+   * returned promise waits for the write to land either way.
+   */
+  setPreference: SetPreference
+  syncPreference: <T = Preferences>(key: string, value: T) => void
+}
+
+const Context = createContext({} as PreferencesContext)
+
+const requestOptions = (value, language) => ({
+  body: JSON.stringify({ value }),
+  headers: {
+    'Accept-Language': language,
+    'Content-Type': 'application/json',
+  },
+})
+
+export const PreferencesProvider: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
+  const contextRef = useRef({} as PreferencesContext)
+  const preferencesRef = useRef({})
+  const pendingUpdate = useRef({})
+  const scheduledMergedUpdates = useRef<Record<string, Promise<void>>>({})
+  const pendingWrites = useRef<Record<string, number>>({})
+  const updateQueues = useRef<Record<string, Promise<void>>>({})
+  const latestWrites = useRef<Record<string, Promise<void>>>({})
+  const { config } = useConfig()
+  const { user } = useAuth()
+  const { i18n } = useTranslation()
+
+  const {
+    routes: { api },
+  } = config
+
+  useEffect(() => {
+    if (!user) {
+      // clear preferences between users
+      preferencesRef.current = {}
+      pendingUpdate.current = {}
+      pendingWrites.current = {}
+      updateQueues.current = {}
+      latestWrites.current = {}
+    }
+  }, [user])
+
+  const getPreference = useCallback(
+    async <T = unknown,>(key: string): Promise<T> => {
+      const prefs = preferencesRef.current
+
+      if (typeof prefs[key] !== 'undefined') {
+        return prefs[key]
+      }
+
+      const promise = new Promise((resolve: (value: T) => void) => {
+        void (async () => {
+          const request = await requests.get(
+            formatAdminURL({
+              apiRoute: api,
+              path: `/payload-preferences/${key}`,
+            }),
+            {
+              credentials: 'include',
+              headers: {
+                'Accept-Language': i18n.language,
+              },
+            },
+          )
+
+          let value = null
+
+          if (request.status === 200) {
+            const preference = await request.json()
+            value = preference.value
+          }
+
+          if (prefs[key] === promise) {
+            prefs[key] = value
+            resolve(value)
+          } else {
+            resolve(await prefs[key])
+          }
+        })()
+      })
+
+      prefs[key] = promise
+
+      return promise
+    },
+    [i18n.language, api, preferencesRef],
+  )
+
+  const syncPreference = useCallback(<T = Preferences,>(key: string, value: T): void => {
+    if (pendingWrites.current[key] || typeof pendingUpdate.current[key] !== 'undefined') {
+      return
+    }
+
+    preferencesRef.current[key] = value
+  }, [])
+
+  const setPreference = useCallback(
+    async <T = Preferences,>(
+      key: string,
+      value: PreferenceUpdater<T> | T,
+      merge = false,
+    ): Promise<void> => {
+      if (typeof value === 'function') {
+        const updater = value as PreferenceUpdater<T>
+        const previousUpdate = updateQueues.current[key] ?? Promise.resolve()
+        pendingWrites.current[key] = (pendingWrites.current[key] ?? 0) + 1
+        const update = previousUpdate.then(async () => {
+          const current = await getPreference<T>(key)
+          const nextValue = updater(current ?? null)
+
+          preferencesRef.current[key] = nextValue
+
+          await requests.post(
+            formatAdminURL({
+              apiRoute: api,
+              path: `/payload-preferences/${key}`,
+            }),
+            requestOptions(nextValue, i18n.language),
+          )
+        })
+
+        latestWrites.current[key] = update
+        updateQueues.current[key] = update.catch(() => undefined)
+        try {
+          await update
+        } finally {
+          pendingWrites.current[key] -= 1
+        }
+        return
+      }
+
+      if (merge === false) {
+        preferencesRef.current[key] = value
+        pendingWrites.current[key] = (pendingWrites.current[key] ?? 0) + 1
+
+        try {
+          const update = requests
+            .post(
+              formatAdminURL({
+                apiRoute: api,
+                path: `/payload-preferences/${key}`,
+              }),
+              requestOptions(value, i18n.language),
+            )
+            .then(() => undefined)
+
+          latestWrites.current[key] = update
+          await update
+        } finally {
+          pendingWrites.current[key] -= 1
+        }
+
+        return
+      }
+
+      let newValue = value
+      const currentPreference = await getPreference(key)
+
+      // handle value objects where multiple values can be set under one key
+      if (
+        typeof value === 'object' &&
+        typeof currentPreference === 'object' &&
+        typeof newValue === 'object'
+      ) {
+        // merge the value with any existing preference for the key
+        if (currentPreference) {
+          newValue = deepMergeSimple(currentPreference, newValue)
+        }
+
+        if (dequal(newValue, currentPreference)) {
+          await latestWrites.current[key]
+          return
+        }
+
+        // add the requested changes to a pendingUpdate batch for the key
+        pendingUpdate.current[key] = mergePreferenceValues({
+          current: pendingUpdate.current[key],
+          value,
+        })
+      } else {
+        if (newValue === currentPreference) {
+          await latestWrites.current[key]
+          return
+        }
+
+        pendingUpdate.current[key] = newValue
+      }
+
+      const updatePreference = async () => {
+        // compare the value stored in context before sending to eliminate duplicate requests
+        if (dequal(pendingUpdate.current[key], preferencesRef.current[key])) {
+          return
+        }
+
+        // Take this batch before awaiting persistence so later changes form a new batch.
+        const changes = pendingUpdate.current[key]
+
+        delete pendingUpdate.current[key]
+        preferencesRef.current[key] = mergePreferenceValues({
+          current: preferencesRef.current[key],
+          value: changes,
+        })
+        pendingWrites.current[key] = (pendingWrites.current[key] ?? 0) + 1
+
+        const previousUpdate = updateQueues.current[key] ?? Promise.resolve()
+        const update = previousUpdate.then(async () => {
+          // Rebase only this batch's changes after earlier updater writes have finished.
+          const nextValue = mergePreferenceValues({
+            current: await getPreference(key),
+            value: changes,
+          })
+
+          preferencesRef.current[key] = nextValue
+
+          await requests.post(
+            formatAdminURL({
+              apiRoute: api,
+              path: `/payload-preferences/${key}`,
+            }),
+            requestOptions(nextValue, i18n.language),
+          )
+        })
+
+        const latestWrite = update.then(() => undefined)
+
+        latestWrites.current[key] = latestWrite
+        updateQueues.current[key] = latestWrite.catch(() => undefined)
+        try {
+          await update
+        } finally {
+          pendingWrites.current[key] -= 1
+        }
+      }
+
+      // Callers coalesced into the same batch must all await its persisted write.
+      if (typeof scheduledMergedUpdates.current[key] === 'undefined') {
+        scheduledMergedUpdates.current[key] = new Promise<void>((resolve, reject) => {
+          setTimeout(() => {
+            delete scheduledMergedUpdates.current[key]
+            updatePreference().then(resolve, reject)
+          })
+        })
+      }
+
+      await scheduledMergedUpdates.current[key]
+    },
+    [api, getPreference, i18n.language, pendingUpdate, updateQueues],
+  )
+
+  contextRef.current.getPreference = getPreference
+  contextRef.current.setPreference = setPreference
+  contextRef.current.syncPreference = syncPreference
+  return <Context value={contextRef.current}>{children}</Context>
+}
+
+export const usePreferences = (): PreferencesContext => use(Context)
+
+function mergePreferenceValues({ current, value }: { current: unknown; value: unknown }): unknown {
+  if (current && value && typeof current === 'object' && typeof value === 'object') {
+    return deepMergeSimple(current, value)
+  }
+
+  return value
+}

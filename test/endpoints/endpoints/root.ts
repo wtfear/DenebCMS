@@ -1,0 +1,69 @@
+import type { Config } from 'payload'
+
+import { applicationEndpoint, customCorsEndpoint, rootEndpoint, userEndpoint } from '../shared.js'
+
+export const endpoints: Config['endpoints'] = [
+  {
+    handler: (req) => Response.json({ email: req.user?.email ?? null }),
+    method: 'get',
+    path: `/${userEndpoint}`,
+  },
+  {
+    disableAuth: true,
+    handler: (req) => Response.json({ email: req.user?.email ?? null }),
+    method: 'get',
+    path: `/${userEndpoint}/without-auth`,
+  },
+  {
+    handler: (req) => {
+      return Response.json(req.body)
+    },
+    method: 'post',
+    path: `/${applicationEndpoint}`,
+  },
+  {
+    handler: () => {
+      return Response.json({ message: 'Hello, world!' })
+    },
+    method: 'get',
+    path: `/${applicationEndpoint}`,
+  },
+  {
+    handler: (req) => {
+      return Response.json({ message: req.t('general:updatedSuccessfully') })
+    },
+    method: 'get',
+    path: `/${applicationEndpoint}/i18n`,
+  },
+  {
+    handler: () => {
+      return Response.json({ message: 'Hello, world!' })
+    },
+    method: 'get',
+    path: `/${rootEndpoint}`,
+  },
+  {
+    handler: (req) => {
+      return Response.json(req.body)
+    },
+    method: 'post',
+    path: `/${rootEndpoint}`,
+  },
+  {
+    handler: () => {
+      return Response.json(
+        { message: 'Custom OPTIONS handler' },
+        {
+          headers: {
+            'Access-Control-Allow-Origin': 'https://custom-domain.com',
+            'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'X-Custom-Header',
+          },
+          status: 200,
+        },
+      )
+    },
+    method: 'options',
+    path: `/${customCorsEndpoint}`,
+  },
+]

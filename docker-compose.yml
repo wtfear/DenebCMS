@@ -1,0 +1,51 @@
+name: deneb-cms
+
+services:
+  deneb-cms:
+    image: node:20-alpine
+    container_name: deneb-cms-app
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./:/app
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URI=postgres://${DB_USER:-deneb_user}:${DB_PASSWORD:-deneb_secure_password}@postgres:5432/${DB_NAME:-deneb_cms}
+      - PAYLOAD_SECRET=${PAYLOAD_SECRET:-deneb_super_secure_secret_key_123456789}
+      - NEXT_PUBLIC_SERVER_URL=${NEXT_PUBLIC_SERVER_URL:-http://localhost:3000}
+    command: sh -c "npm run start || npx next start"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - deneb-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: deneb-cms-db
+    restart: unless-stopped
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME:-deneb_cms}
+      POSTGRES_USER: ${DB_USER:-deneb_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-deneb_secure_password}
+    volumes:
+      - deneb_pg_data:/var/lib/postgresql/data
+    networks:
+      - deneb-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-deneb_user} -d ${DB_NAME:-deneb_cms}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  deneb-net:
+    driver: bridge
+
+volumes:
+  deneb_pg_data:

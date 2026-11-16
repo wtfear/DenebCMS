@@ -1,0 +1,35 @@
+@layer payload-default {
+  :root,
+  :host {
+    /* Fields — controls text inputs, selects, date pickers, code editors, etc. */
+    --field-min-height-large: var(--spacer-5);
+    --field-min-height-medium: var(--spacer-4);
+    --field-padding-inline: var(--spacer-2);
+    --field-border-radius: var(--radius-medium);
+
+    /* Buttons — also drives button-like elements (tabs, icon buttons, etc.) */
+    --button-height: var(--spacer-4);
+    --button-radius: var(--radius-medium);
+
+    /* Compact controls — search inputs, paginator inputs, toolbar inputs */
+    --control-height: var(--spacer-4);
+
+    /* Popup menus */
+    --popup-radius: var(--radius-large);
+    --popup-item-radius: var(--button-radius);
+
+    /* Stroke widths */
+    --stroke-width-small: 1px;
+    --stroke-width-medium: 2px;
+
+    /* Focus outlines */
+    --accessibility-outline-offset: 1px;
+    --accessibility-outline-inset: calc(-1 * var(--stroke-width-small));
+  }
+
+  :root,
+  :host,
+  [data-theme] {
+    --accessibility-outline: var(--stroke-width-small) solid var(--accessibility-focus-color);
+  }
+}
