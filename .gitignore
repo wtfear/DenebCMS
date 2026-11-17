@@ -1,6 +1,8 @@
 coverage
 package-lock.json
-dist
+# dist
+!dist
+!dist/**
 /.idea/*
 !/.idea/runConfigurations
 /.idea/runConfigurations/_template*
@@ -23,7 +25,9 @@ CLAUDE.local.md
 .worktrees/
 
 # Custom actions
-!.github/actions/**/dist
+!.github/actions/**/# dist
+!dist
+!dist/**
 
 test/packed
 test-results
@@ -186,8 +190,12 @@ out
 
 # Nuxt.js build / generate output
 .nuxt
-dist
-dist_optimized
+# dist
+!dist
+!dist/**
+# dist
+!dist
+!dist/**_optimized
 
 # Gatsby files
 .cache/
@@ -196,7 +204,9 @@ dist_optimized
 # public
 
 # vuepress build output
-.vuepress/dist
+.vuepress/# dist
+!dist
+!dist/**
 
 # vuepress v2.x temp and cache directory
 .temp

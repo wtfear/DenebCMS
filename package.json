@@ -3,14 +3,15 @@
   "description": "DenebCMS: Enterprise Headless CMS & Sovereign Next.js Application Engine by WTFear Agency",
   "version": "4.0.0-beta.9",
   "private": true,
-  "workspaces": [
+  "workspaces_disabled": [
     "packages/*",
     "test/*"
   ],
   "type": "module",
   "scripts": {
     "bf": "pnpm run build:force",
-    "build": "pnpm run build:core",
+    "build": "node build.js",
+    "build:core": "turbo build --filter \"!@payloadcms/plugin-*\" --filter \"!@payloadcms/storage-*\" --filter \"!blank\" --filter \"!blank-tanstack\" --filter \"!website\" --filter \"!ecommerce\"",
     "build:admin-bar": "turbo build --filter \"@payloadcms/admin-bar\"",
     "build:all": "turbo build --filter \"!blank\" --filter \"!blank-tanstack\" --filter \"!website\" --filter \"!ecommerce\"",
     "build:all:force": "pnpm clean && pnpm build:all",
