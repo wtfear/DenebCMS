@@ -231,6 +231,5 @@
     "vitest-browser-react": "2.3.0",
     "wrangler": "~4.61.1",
     "zod": "catalog:"
-  },
-  "packageManager": "pnpm@11.28.6"
+  }
 }
